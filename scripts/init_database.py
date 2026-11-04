@@ -3,24 +3,45 @@ from pathlib import Path
 import sqlite3
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = (ROOT / 'src/main/resources/academia/schema.sql').read_text(encoding='utf-8')
+SQL = ROOT / 'src/main/resources/academia'
+VERSION = 4
+
 
 def initialize(connection):
+    if connection.in_transaction:
+        raise RuntimeError('Inicializa SQLite fuera de una transacción existente')
+    connection.execute('PRAGMA busy_timeout = 5000')
     connection.execute('PRAGMA foreign_keys = OFF')
-    columns = {row[1] for row in connection.execute('PRAGMA table_info(alumnos)')}
-    migration = ''
-    if 'codigo_qr' in columns:
-        migration = (ROOT / 'src/main/resources/academia/migration-v2.sql').read_text(encoding='utf-8')
     try:
-        connection.executescript('BEGIN IMMEDIATE;\n' + migration + '\n' + SCHEMA)
-        if connection.execute('PRAGMA foreign_key_check').fetchall():
-            raise RuntimeError('Relaciones invalidas en la migracion')
+        connection.execute('BEGIN IMMEDIATE')
+        version = connection.execute('PRAGMA user_version').fetchone()[0]
+        if version > VERSION:
+            raise RuntimeError('La base requiere una versión más reciente de la aplicación')
+        if version < 3:
+            columns = {row[1] for row in connection.execute('PRAGMA table_info(alumnos)')}
+            if 'codigo_qr' in columns:
+                run_script(connection, 'migration-v2.sql', ';')
+            run_script(connection, 'schema.sql', ';')
+            run_script(connection, 'backfill-alumnos.sql', ';')
+            run_script(connection, 'migration-v3.sql', '-- siguiente sentencia')
+        if version < VERSION:
+            run_script(connection, 'migration-v4.sql', ';')
+            connection.execute(f'PRAGMA user_version = {VERSION}')
+        if connection.execute('PRAGMA foreign_key_check').fetchone():
+            raise RuntimeError('Relaciones inválidas en la base')
         connection.commit()
     except Exception:
         connection.rollback()
         raise
     finally:
         connection.execute('PRAGMA foreign_keys = ON')
+
+
+def run_script(connection, name, separator):
+    for statement in (SQL / name).read_text(encoding='utf-8').split(separator):
+        if statement.strip():
+            connection.execute(statement)
+
 
 if __name__ == '__main__':
     path = ROOT / 'data/academia.db'

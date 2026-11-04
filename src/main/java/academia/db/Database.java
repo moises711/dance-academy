@@ -4,63 +4,100 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 public final class Database {
     public static final Path FILE = Path.of("data", "academia.db").toAbsolutePath().normalize();
+    private static final int VERSION = 4;
 
     private Database() {
     }
 
+    public static Connection open() throws SQLException {
+        var connection = DriverManager.getConnection("jdbc:sqlite:" + FILE);
+        try (var statement = connection.createStatement()) {
+            statement.execute("PRAGMA busy_timeout = 5000");
+            statement.execute("PRAGMA foreign_keys = ON");
+            return connection;
+        } catch (SQLException exception) {
+            try {
+                connection.close();
+            } catch (SQLException closeFailure) {
+                exception.addSuppressed(closeFailure);
+            }
+            throw exception;
+        }
+    }
+
     public static void initialize() throws IOException, SQLException {
         Files.createDirectories(FILE.getParent());
-        String schema;
-        try (var input = Database.class.getResourceAsStream("/academia/schema.sql")) {
-            if (input == null) {
-                throw new IOException("Falta el recurso academia/schema.sql");
-            }
-            schema = new String(input.readAllBytes(), StandardCharsets.UTF_8);
-        }
-
-        try (var connection = DriverManager.getConnection("jdbc:sqlite:" + FILE);
-             var statement = connection.createStatement()) {
+        try (var connection = open(); var statement = connection.createStatement()) {
+            // SQLite exige desactivar las referencias antes de reconstruir alumnos.
             statement.execute("PRAGMA foreign_keys = OFF");
-            statement.execute("PRAGMA busy_timeout = 5000");
-            boolean migrate = false;
-            try (var columns = statement.executeQuery("PRAGMA table_info(alumnos)")) {
-                while (columns.next()) {
-                    migrate |= "codigo_qr".equals(columns.getString("name"));
-                }
-            }
-            if (migrate) {
-                try (var input = Database.class.getResourceAsStream("/academia/migration-v2.sql")) {
-                    if (input == null) {
-                        throw new IOException("Falta el recurso academia/migration-v2.sql");
-                    }
-                    schema = new String(input.readAllBytes(), StandardCharsets.UTF_8) + "\n" + schema;
-                }
-            }
-            connection.setAutoCommit(false);
+            statement.execute("BEGIN IMMEDIATE");
             try {
-                // El esquema contiene sentencias simples, sin triggers ni puntos y coma en textos.
-                for (String sql : schema.split(";")) {
-                    if (!sql.isBlank()) {
-                        statement.executeUpdate(sql);
+                int version;
+                try (var result = statement.executeQuery("PRAGMA user_version")) {
+                    version = result.getInt(1);
+                }
+                if (version > VERSION) {
+                    throw new SQLException("La base de datos requiere una versión más reciente de la aplicación");
+                }
+                if (version < 3) {
+                    if (hasLegacyCode(statement)) {
+                        runScript(statement, "migration-v2.sql", ";");
+                    }
+                    runScript(statement, "schema.sql", ";");
+                    runScript(statement, "backfill-alumnos.sql", ";");
+                    runScript(statement, "migration-v3.sql", "(?m)^-- siguiente sentencia$");
+                }
+                if (version < VERSION) {
+                    runScript(statement, "migration-v4.sql", ";");
+                    statement.execute("PRAGMA user_version = " + VERSION);
+                }
+                try (var result = statement.executeQuery("PRAGMA foreign_key_check")) {
+                    if (result.next()) {
+                        throw new SQLException("La base de datos contiene relaciones inválidas");
                     }
                 }
-                try (var violations = statement.executeQuery("PRAGMA foreign_key_check")) {
-                    if (violations.next()) {
-                        throw new SQLException("Relaciones invalidas en la migracion");
-                    }
+                statement.execute("COMMIT");
+            } catch (IOException | SQLException | RuntimeException exception) {
+                try {
+                    statement.execute("ROLLBACK");
+                } catch (SQLException rollbackFailure) {
+                    exception.addSuppressed(rollbackFailure);
                 }
-                connection.commit();
-            } catch (SQLException exception) {
-                connection.rollback();
                 throw exception;
             }
-            connection.setAutoCommit(true);
-            statement.execute("PRAGMA foreign_keys = ON");
+        }
+    }
+
+    private static boolean hasLegacyCode(Statement statement) throws SQLException {
+        try (var columns = statement.executeQuery("PRAGMA table_info(alumnos)")) {
+            while (columns.next()) {
+                if ("codigo_qr".equals(columns.getString("name"))) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
+    private static void runScript(Statement statement, String file, String separator)
+            throws IOException, SQLException {
+        try (var input = Database.class.getResourceAsStream("/academia/" + file)) {
+            if (input == null) {
+                throw new IOException("Falta el recurso academia/" + file);
+            }
+            var script = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            for (String sql : script.split(separator)) {
+                if (!sql.isBlank()) {
+                    statement.executeUpdate(sql);
+                }
+            }
         }
     }
 }

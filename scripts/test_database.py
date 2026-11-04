@@ -16,6 +16,9 @@ c.execute("INSERT INTO movimientos_caja(caja_id,tipo,concepto,monto_centimos,met
 assert c.execute('SELECT saldo_pendiente_centimos FROM v_matriculas').fetchone()[0] == 0
 assert c.execute('SELECT efectivo_esperado_centimos FROM v_balance_cajas').fetchone()[0] == 10000
 for sql in [
+    "UPDATE pagos SET monto_centimos=1.5 WHERE id=1",
+    "UPDATE matriculas SET fecha_vencimiento='2026-11-31' WHERE id=1",
+    "INSERT INTO asistencias(matricula_id,fecha,hora_ingreso) VALUES(1,'2026-11-04','24:00:00')",
     "INSERT INTO alumnos(estudiante_id) VALUES(999)",
     "INSERT INTO congelaciones(matricula_id,fecha_inicio,motivo) VALUES(1,'2026-11-05','Duplicada')",
     "INSERT INTO pagos(matricula_id,concepto,monto_centimos,metodo) VALUES(1,'mensualidad',-1,'efectivo')",
@@ -56,6 +59,11 @@ assert c.execute('SELECT codigo FROM alumnos WHERE estudiante_id=1').fetchone()[
 # Simula una base anterior con QR y relaciones existentes.
 c.commit()
 c.execute('PRAGMA foreign_keys=OFF')
+for (name,) in c.execute("SELECT name FROM sqlite_master WHERE type='trigger'").fetchall():
+    c.execute(f'DROP TRIGGER "{name}"')
+for table in ('solicitudes_cobro', 'auditoria', 'usuarios'):
+    c.execute(f'DROP TABLE {table}')
+c.execute('PRAGMA user_version=2')
 c.execute('ALTER TABLE alumnos RENAME COLUMN codigo TO codigo_qr')
 c.commit()
 initialize(c)
@@ -64,3 +72,36 @@ assert c.execute('SELECT codigo FROM alumnos WHERE estudiante_id=1').fetchone()[
 assert c.execute('SELECT alumno_id FROM matriculas').fetchone()[0] == 1
 assert not c.execute('PRAGMA foreign_key_check').fetchall()
 print('OK: codigos de cuatro digitos, unicidad y migracion de QR con relaciones existentes')
+
+assert c.execute('PRAGMA user_version').fetchone()[0] == 4
+c.execute('PRAGMA user_version=5')
+try:
+    initialize(c)
+except RuntimeError:
+    pass
+else:
+    raise AssertionError('Se aceptó una base de versión futura')
+assert c.execute('PRAGMA user_version').fetchone()[0] == 5
+assert c.execute('PRAGMA foreign_keys').fetchone()[0] == 1
+print('OK: versión futura protegida y claves foráneas activas después del rechazo')
+
+old = sqlite3.connect(':memory:')
+old.execute('CREATE TABLE estudiantes (id INTEGER PRIMARY KEY, nombre TEXT, email TEXT, telefono TEXT)')
+old.executemany('INSERT INTO estudiantes(id,nombre) VALUES(?,?)', [(i, 'Alumno') for i in range(1, 501)])
+old.commit()
+initialize(old)
+assert old.execute('SELECT count(DISTINCT codigo) FROM alumnos').fetchone()[0] == 500
+print('OK: se recuperan todos los alumnos antiguos con códigos únicos')
+
+v3 = sqlite3.connect(':memory:')
+initialize(v3)
+v3.execute("INSERT INTO estudiantes(nombre) VALUES ('Anterior')")
+for table in ('solicitudes_cobro', 'auditoria', 'usuarios'):
+    v3.execute(f'DROP TABLE {table}')
+v3.execute('PRAGMA user_version=3')
+v3.commit()
+initialize(v3)
+assert v3.execute('PRAGMA user_version').fetchone()[0] == 4
+assert v3.execute('SELECT nombre FROM estudiantes').fetchone()[0] == 'Anterior'
+assert v3.execute('SELECT count(*) FROM usuarios').fetchone()[0] == 0
+print('OK: migración de versión 3 a 4 sin pérdida de datos')
