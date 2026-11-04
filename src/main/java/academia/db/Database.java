@@ -3,6 +3,8 @@ package academia.db;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -17,6 +19,11 @@ public final class Database {
     }
 
     public static Connection open() throws SQLException {
+        try {
+            protectLocalData();
+        } catch (IOException failure) {
+            throw new SQLException("No se pudo proteger la base local", failure);
+        }
         var connection = DriverManager.getConnection("jdbc:sqlite:" + FILE);
         try (var statement = connection.createStatement()) {
             statement.execute("PRAGMA busy_timeout = 5000");
@@ -32,8 +39,34 @@ public final class Database {
         }
     }
 
+    private static void protectLocalData() throws IOException {
+        Path directory = FILE.getParent();
+        Files.createDirectories(directory);
+        if (!Files.isDirectory(directory, LinkOption.NOFOLLOW_LINKS)) {
+            throw new IOException("La carpeta de datos debe ser un directorio local");
+        }
+        boolean posix = Files.getFileStore(directory).supportsFileAttributeView("posix");
+        if (posix) {
+            Files.setPosixFilePermissions(directory, PosixFilePermissions.fromString("rwx------"));
+        }
+        if (Files.exists(FILE, LinkOption.NOFOLLOW_LINKS)) {
+            if (!Files.isRegularFile(FILE, LinkOption.NOFOLLOW_LINKS)) {
+                throw new IOException("La base de datos debe ser un archivo regular");
+            }
+            if (posix) {
+                Files.setPosixFilePermissions(FILE, PosixFilePermissions.fromString("rw-------"));
+            }
+        } else if (posix) {
+            try {
+                Files.createFile(FILE, PosixFilePermissions.asFileAttribute(
+                        PosixFilePermissions.fromString("rw-------")));
+            } catch (java.nio.file.FileAlreadyExistsException concurrentOpen) {
+                // Another connection may have just created the private database.
+            }
+        }
+    }
+
     public static void initialize() throws IOException, SQLException {
-        Files.createDirectories(FILE.getParent());
         try (var connection = open(); var statement = connection.createStatement()) {
             // SQLite exige desactivar las referencias antes de reconstruir alumnos.
             statement.execute("PRAGMA foreign_keys = OFF");

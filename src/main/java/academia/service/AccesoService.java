@@ -59,6 +59,10 @@ public final class AccesoService {
     }
 
     public Sesion autenticar(String nombre, char[] clave) throws SQLException {
+        return autenticarLocal(nombre, clave);
+    }
+
+    private static synchronized Sesion autenticarLocal(String nombre, char[] clave) throws SQLException {
         String usuario = nombreUsuario(nombre);
         if (clave == null || clave.length > 128) {
             throw new SecurityException("Credenciales inválidas");
@@ -74,9 +78,21 @@ public final class AccesoService {
             boolean coincide = MessageDigest.isEqual(esperado, calculado);
             Arrays.fill(calculado, (byte) 0);
             if (!coincide || !existe || row.getInt("activo") != 1) {
+                esperarTrasFallo();
+                if (existe) {
+                    Sql.auditar(connection, row.getLong("id"), "acceso.autenticarFallido", null);
+                }
                 throw new SecurityException("Credenciales inválidas");
             }
             return new Sesion(row.getLong("id"));
+        }
+    }
+
+    private static void esperarTrasFallo() {
+        try {
+            Thread.sleep(1000);
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
         }
     }
 

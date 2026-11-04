@@ -18,16 +18,26 @@ public final class BackendIntegration {
             throw new IllegalStateException("Ejecuta la prueba desde una carpeta temporal vacía");
         }
         Database.initialize();
+        if (Files.getFileStore(Database.FILE).supportsFileAttributeView("posix")) {
+            comprobar(java.nio.file.attribute.PosixFilePermissions.toString(
+                    Files.getPosixFilePermissions(Database.FILE)).equals("rw-------"));
+            comprobar(java.nio.file.attribute.PosixFilePermissions.toString(
+                    Files.getPosixFilePermissions(Database.FILE.getParent())).equals("rwx------"));
+        }
         var acceso = new AccesoService();
         char[] clave = "contraseña-prueba-larga".toCharArray();
         acceso.crearPrimerAdministrador("admin", clave);
+        long inicioFallo = System.nanoTime();
         try {
             acceso.autenticar("admin", "incorrecta".toCharArray());
             throw new AssertionError("Se aceptó una contraseña incorrecta");
         } catch (SecurityException expected) {
             // La autenticación rechaza credenciales incorrectas.
         }
+        comprobar(System.nanoTime() - inicioFallo >= 1_000_000_000L);
         var sesion = acceso.autenticar("admin", clave);
+        comprobar(acceso.auditoria(sesion, Long.MAX_VALUE).stream()
+                .anyMatch(fila -> "acceso.autenticarFallido".equals(fila.get("operacion"))));
         long usuario = acceso.crearUsuario(sesion, "consulta", clave, AccesoService.Rol.CONSULTA);
         var lectura = acceso.autenticar("consulta", clave);
         new OperacionService(lectura).consultar(OperacionService.Reporte.DASHBOARD);

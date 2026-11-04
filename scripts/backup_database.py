@@ -6,7 +6,7 @@ from pathlib import Path
 import sqlite3
 import tempfile
 
-from init_database import ROOT
+from init_database import ROOT, private_data_directory
 
 
 def backup(source: Path, directory: Path) -> Path:
@@ -34,5 +34,6 @@ if __name__ == '__main__':
                         help='valida y prepara una copia de recuperación sin sobrescribir la base activa')
     args = parser.parse_args()
     data = ROOT / 'data'
+    private_data_directory(data)
     source = data / 'academia.db' if args.restaurar is None else args.restaurar
     print(backup(source, data))
