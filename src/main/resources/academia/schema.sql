@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS historial_alumnos (
  id INTEGER PRIMARY KEY, alumno_id INTEGER NOT NULL REFERENCES alumnos(estudiante_id),
  evento TEXT NOT NULL, detalle TEXT, registrado_en TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-INSERT OR IGNORE INTO alumnos(estudiante_id) SELECT id FROM estudiantes;
+
 CREATE TABLE IF NOT EXISTS academia (
  id INTEGER PRIMARY KEY CHECK(id=1), nombre TEXT NOT NULL, ruc TEXT, direccion TEXT,
  telefono TEXT, email TEXT, moneda TEXT NOT NULL DEFAULT 'PEN', zona_horaria TEXT NOT NULL DEFAULT 'America/Lima'
@@ -174,4 +174,3 @@ CREATE VIEW IF NOT EXISTS v_dashboard AS
  (SELECT count(*) FROM asistencias WHERE fecha=date('now','-5 hours')) AS ingresos_hoy,
  (SELECT COALESCE(sum(monto_centimos),0) FROM pagos WHERE estado='confirmado' AND date(fecha,'-5 hours')=date('now','-5 hours')) AS cobros_hoy_centimos,
  (SELECT count(*) FROM v_alertas_vencimientos) AS alertas_vencimiento;
-PRAGMA user_version = 2;

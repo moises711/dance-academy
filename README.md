@@ -56,3 +56,29 @@ Antes de admitir un ingreso, la aplicación debe comprobar la vigencia, las cong
 Confirmar un pago y registrar su ingreso en caja en una sola transacción. Las finanzas se calculan sobre `movimientos_caja`, sin sumar de nuevo los pagos. El saldo esperado de efectivo excluye Yape. Al anular un pago ya registrado, agregar un egreso de devolución conservando el movimiento original. Al pagar una remuneración, registrar su egreso y actualizar su estado en una transacción. La aplicación debe validar que los movimientos correspondan a una caja abierta y que sus importes coincidan con el pago o remuneración asociado.
 
 Los comprobantes son boletas de emisión local; esta base no implementa emisión electrónica SUNAT. Guardar los datos del receptor y el importe al emitirlos. Para sorteos, consultar `v_elegibles_sorteo` antes de registrar participantes y volver a validar al elegir ganadores. La selección aleatoria se implementa en la aplicación.
+
+## Servicios Java del backend
+
+- `AlumnoService` registra, busca, edita y cambia el estado de alumnos. Las ediciones y los cambios de estado se registran en el historial.
+- `MatriculaService` crea planes y matrículas, renueva, congela, reactiva y registra ingresos. Los reintentos de ingreso deben reutilizar matrícula, horario, fecha y hora.
+- `FinanzasService` gestiona caja, cobros, devoluciones, comprobantes locales y pago de remuneraciones. Las referencias Yape son únicas. Los cobros requieren una clave UUID que se reutiliza al reintentar la misma operación.
+- `OperacionService` registra instructores, horarios, asistencias, remuneraciones y peso. También consulta las vistas y configura los intervalos.
+- `SorteoService` comprueba elegibilidad al inscribir y al elegir ganadores.
+
+El vencimiento incluye el último día del plan. Una congelación abarca desde el primer día de pausa hasta el día anterior a la reactivación.
+
+Los servicios requieren inicializar la base con `Database.initialize()` al arrancar. La prueba `academia.BackendIntegration` se ejecuta desde una carpeta temporal vacía con las clases principales y de prueba, los recursos y SQLite JDBC con sus dependencias en el classpath.
+
+## Recuperación local
+
+Ejecuta `python3 scripts/backup_database.py` para crear un respaldo. Con `python3 scripts/backup_database.py --restaurar RUTA_DEL_RESPALDO` se genera una copia verificada por separado en `data/`. Para activarla, cierra todos los procesos que usen la base, conserva una copia de la base actual y sustituye `data/academia.db` por la copia verificada.
+
+## Acceso local y auditoría
+
+La migración a versión 4 incorpora usuarios, auditoría y claves de solicitud de cobro. Desde la raíz del proyecto, ejecuta la clase `academia.service.AccesoService` con el nombre de usuario como argumento y con SQLite JDBC y sus dependencias en el classpath. La clase solicita la contraseña en una terminal y crea el primer administrador una sola vez.
+
+Los servicios Java requieren una sesión de `AccesoService.autenticar`. La sesión vence a las ocho horas o al cerrarla. Las cuentas desactivadas pierden acceso en la siguiente operación. `ADMIN` puede administrar usuarios, planes y configuración, cerrar cajas, devolver pagos, gestionar remuneraciones y consultar auditoría. `OPERADOR` puede registrar las operaciones diarias y consultar datos operativos. `CONSULTA` tiene acceso al resumen general.
+
+Las escrituras de los servicios guardan el usuario y la operación en la misma transacción. Las consultas de auditoría se paginan usando el identificador del último resultado como límite. Los permisos se aplican a través de los servicios Java. El acceso directo al archivo SQLite depende de los permisos del sistema operativo.
+
+Genera y conserva un UUID por cada solicitud de cobro. El mismo UUID y los mismos datos devuelven el identificador original, incluso después de cerrar la caja. Si cambias algún dato del cobro, se rechaza la reutilización de la clave.
