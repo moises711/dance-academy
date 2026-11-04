@@ -23,3 +23,4 @@ La primera ejecución requiere acceso a Maven Central para descargar dependencia
 | `data/` | Base local, fuera del control de versiones |
 
 Ejecuta siempre desde la raíz del proyecto para usar el mismo archivo `data/academia.db`. SQLite crea el archivo y la tabla en el primer arranque. Para respaldar los datos, cierra la aplicación y copia el archivo de base de datos. Si más adelante cambia la estructura de las tablas, agrega migraciones para actualizar las bases existentes.
+# dance-academy
