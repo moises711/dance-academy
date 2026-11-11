@@ -2,9 +2,9 @@
 
 La interfaz contiene los 12 módulos: Dashboard, Alumnos, Matrículas, Asistencias,
 Peso, Pagos, Comprobantes, Instructores, Sorteos, Finanzas, Reportes y Configuración.
-Cada módulo incluye sus paneles secundarios, tablas y formularios de ejemplo.
+Cada módulo incluye sus paneles secundarios, tablas y formularios.
 
-Esta versión trabaja exclusivamente con datos de demostración en memoria.
+La vista previa inicia con un solo alumno de prueba, Sofía Demo (0007). Las demás secciones empiezan vacías. Los registros que agregues se mantienen en memoria durante la sesión.
 No abre SQLite, no inicializa la base de datos y no guarda cambios de negocio.
 La exportación CSV permite guardar la tabla filtrada en un archivo elegido por el usuario.
 
@@ -42,16 +42,16 @@ vista compacta y el informe `target/ui-preview/resultados.txt`.
 ## Revisión manual
 
 - Recorrer el menú y las pestañas de cada módulo.
-- Buscar por nombre, DNI o código y filtrar por los estados de ejemplo.
-- Seleccionar un alumno, editarlo y pausar/reactivar su estado de ejemplo.
-- En Asistencias, probar `0007` y comprobar el registro local del ingreso.
+- Buscar por nombre, DNI o código y filtrar por los estados disponibles.
+- Seleccionar un alumno, editarlo y pausar/reactivar su estado.
+- Registrar un alumno con un código de cuatro dígitos y usarlo en Asistencias.
 - Crear un registro y comprobar los mensajes de validación del formulario.
 - Exportar una tabla y abrir el CSV para comprobar encabezados y acentos.
-- Cerrar y volver a abrir: los datos vuelven al ejemplo inicial.
+- Cerrar y volver a abrir: vuelve a aparecer únicamente el alumno de prueba.
 
 La validación de membresías reales, las renovaciones, la emisión de comprobantes,
 la elegibilidad real y las operaciones de caja quedan pendientes de integración
-con el backend. Los indicadores del dashboard son ejemplos de diseño.
+con el backend.
 
 ## Dashboard de la academia
 
@@ -61,9 +61,9 @@ y tabla de movimientos con estados de colores.
 
 La búsqueda superior filtra los movimientos visibles. Al escribir el nombre de
 un módulo y pulsar Enter, abre ese módulo. Los filtros de periodo y estado se
-aplican a los movimientos de demostración; las tarjetas muestran los totales de
-los datos de ejemplo de la sesión, independientemente del filtro de la tabla.
-Los gráficos pequeños son ilustrativos. La exportación incluye todos los
+aplican a los movimientos de la vista. Las tarjetas comienzan en cero y muestran
+los totales de la sesión, independientemente del filtro de la tabla.
+La exportación incluye todos los
 movimientos filtrados, aunque ocupen más de una página.
 
 Las pruebas verifican búsqueda, filtro de estado, periodo, cambio de página y

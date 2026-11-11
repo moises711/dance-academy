@@ -1,5 +1,7 @@
-param(
+﻿param(
     [switch]$TestViews,
+    [switch]$CompileOnly,
+    [string]$ClassesDirectory,
     [string]$JdkHome = $env:JAVA_HOME
 )
 $ErrorActionPreference = 'Stop'
@@ -13,7 +15,7 @@ if (-not $JdkHome) {
 $fxJars = @(Get-ChildItem "$env:USERPROFILE/.m2/repository/org/openjfx" -Recurse -Filter '*-21.0.8-win.jar')
 if ($fxJars.Count -lt 3) { throw 'Faltan dependencias JavaFX 21.0.8. Ejecuta mvn compile primero.' }
 $modulePath = $fxJars.FullName -join ';'
-$classes = Join-Path $projectRoot 'target/ui-classes'
+$classes = if ($ClassesDirectory) { $ClassesDirectory } else { Join-Path $projectRoot 'target/ui-classes' }
 New-Item -ItemType Directory -Force $classes | Out-Null
 $sources = @((Get-ChildItem "$projectRoot/src/main/java/academia/ui" -Filter '*.java').FullName)
 $sources += "$projectRoot/src/main/java/academia/Main.java"
@@ -21,6 +23,7 @@ $sources += "$projectRoot/src/main/java/academia/Main.java"
 if ($LASTEXITCODE -ne 0) { throw 'Falló la compilación de la interfaz.' }
 New-Item -ItemType Directory -Force "$classes/academia" | Out-Null
 Copy-Item "$projectRoot/src/main/resources/academia/ui.css" "$classes/academia/ui.css" -Force
+if ($CompileOnly) { return }
 $javaArguments = @("-Djavafx.cachedir=$projectRoot/target/javafx-cache", '--module-path', $modulePath, '--add-modules', 'javafx.controls', '-cp', $classes, 'academia.Main')
 if ($TestViews) { $javaArguments += '--test-views' }
 Push-Location $projectRoot
