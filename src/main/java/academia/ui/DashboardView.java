@@ -6,10 +6,8 @@ import javafx.collections.ObservableList;
 import javafx.collections.transformation.FilteredList;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
-import javafx.scene.canvas.Canvas;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
-import javafx.scene.paint.Color;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
@@ -37,15 +35,7 @@ final class DashboardView extends VBox {
     DashboardView(List<PreviewData.Module> modules, Consumer<String> navigate,
                   BiConsumer<PreviewData.Section,TableView<ObservableList<String>>> export) {
         this.modules=modules; setSpacing(24);
-        section=PreviewData.section("Movimientos recientes","Código|Alumno|Concepto|Método|Estado|Fecha",
-            "0007|Ana Torres|Mensualidad|Yape|Confirmado|"+today,
-            "0024|Luis Mendoza|8 sesiones|Efectivo|Confirmado|"+today,
-            "0108|María Flores|Congelación|—|Pausada|"+today.minusDays(1),
-            "0007|Ana Torres|Próxima renovación|—|Pendiente|"+today.minusDays(1),
-            "0024|Luis Mendoza|Reserva de clase|—|Cancelado|"+today.minusDays(2),
-            "0007|Ana Torres|Control de peso|—|Registrado|"+today.minusDays(3),
-            "0024|Luis Mendoza|Ingreso a clase|Código|Registrado|"+today.minusDays(4),
-            "0108|María Flores|Matrícula|—|Registrado|"+today.minusDays(8));
+        section=PreviewData.section("Movimientos recientes","Código|Alumno|Concepto|Método|Estado|Fecha");
         filtered=new FilteredList<>(section.rows(),r->true);
         period.getItems().addAll("Últimos 7 días","Hoy","Últimos 30 días","Todo el historial"); period.getSelectionModel().selectFirst();
         period.getStyleClass().add("period-control"); period.setId("dashboard-period");
@@ -100,9 +90,10 @@ final class DashboardView extends VBox {
         var right=new HBox(10,new Label("Filas por página"),pageSize);right.setAlignment(Pos.CENTER_RIGHT);
         var bottom=new BorderPane();bottom.setLeft(count);bottom.setCenter(pages);bottom.setRight(right);BorderPane.setAlignment(count,Pos.CENTER_LEFT);bottom.getStyleClass().add("recent-footer");
         var panel=new VBox(tools,table,bottom);panel.getStyleClass().add("recent-panel");panel.setMinHeight(Region.USE_PREF_SIZE);
-        var note=new Label("DATOS DE DEMOSTRACIÓN  ·  ACADEMIA DE BAILE");note.getStyleClass().add("dashboard-note");note.setMaxWidth(Double.MAX_VALUE);note.setAlignment(Pos.CENTER);
+        var note=new Label("VISTA PREVIA  ·  ACADEMIA DE BAILE");note.getStyleClass().add("dashboard-note");note.setMaxWidth(Double.MAX_VALUE);note.setAlignment(Pos.CENTER);
         getChildren().addAll(indicators,panel,note);refresh();
     }
+    PreviewData.Section movements() { return section; }
     Node periodControl(){return period;}
     void search(String value){query=value.trim().toLowerCase(Locale.ROOT);refresh();}
     private void refresh(){
@@ -113,21 +104,16 @@ final class DashboardView extends VBox {
         long active=modules.get(1).sections().getFirst().rows().stream().filter(r->r.getLast().equals("Activo")).count();
         long enrollments=modules.get(2).sections().getFirst().rows().stream().filter(r->r.getLast().equals("Activa")).count();
         var payments=modules.get(5).sections().getFirst().rows();
-        var total=payments.stream().filter(r->r.getLast().equals("Confirmado")).map(r->new java.math.BigDecimal(r.get(2))).reduce(java.math.BigDecimal.ZERO,java.math.BigDecimal::add);
-        indicators.getChildren().addAll(metric("Alumnos","Alumnos activos",String.valueOf(active),"blue","Estado actual",new double[]{2,3,2,4,5,4,6}),metric("Matrículas","Matrículas activas",String.valueOf(enrollments),"green","Estado actual",new double[]{2,4,3,5,4,4,5}),metric("clock","Pagos pendientes",String.valueOf(payments.stream().filter(r->r.getLast().equals("Pendiente")).count()),"amber","Estado actual",new double[]{5,4,6,4,2,3,2}),metric("money","Cobros confirmados","S/ "+total.toPlainString(),"purple","Total de pagos de ejemplo",new double[]{2,3,2,5,6,4,5}));
+        var total=payments.stream().filter(r->r.getLast().equals("Confirmado")).map(r->r.get(2)).filter(amount->!amount.isBlank()).map(java.math.BigDecimal::new).reduce(java.math.BigDecimal.ZERO,java.math.BigDecimal::add);
+        indicators.getChildren().addAll(metric("Alumnos","Alumnos activos",String.valueOf(active),"blue","Estado actual"),metric("Matrículas","Matrículas activas",String.valueOf(enrollments),"green","Estado actual"),metric("clock","Pagos pendientes",String.valueOf(payments.stream().filter(r->r.getLast().equals("Pendiente")).count()),"amber","Estado actual"),metric("money","Cobros confirmados","S/ "+total.setScale(2,java.math.RoundingMode.HALF_UP).toPlainString(),"purple","Total de pagos en esta sesión"));
     }
-    private Node metric(String icon,String name,String value,String color,String description,double[] points){
+    private Node metric(String icon,String name,String value,String color,String description){
         var symbol=new StackPane(Icons.of(icon,24));symbol.getStyleClass().addAll("summary-icon","summary-icon-"+color);
         var title=new Label(name);title.getStyleClass().add("summary-label");
         var number=new Label(value);number.getStyleClass().add("summary-value");
         var top=new HBox(12,symbol,new VBox(3,title,number));top.setAlignment(Pos.CENTER_LEFT);
         var trend=new Label(description);trend.getStyleClass().add("summary-description");
-        var graph=new Canvas(65,28);var gc=graph.getGraphicsContext2D();
-        Color stroke=Color.web(switch(color){case "green"->"#5b9d7f";case "amber"->"#d7a158";case "purple"->"#af98d0";default->"#7e9ac4";});
-        gc.setFill(stroke.deriveColor(0,1,1,.13));gc.beginPath();gc.moveTo(0,28);for(int i=0;i<points.length;i++)gc.lineTo(i*10,27-points[i]*3.5);gc.lineTo(60,28);gc.closePath();gc.fill();
-        gc.setStroke(stroke);gc.setLineWidth(1.5);gc.beginPath();for(int i=0;i<points.length;i++){if(i==0)gc.moveTo(0,27-points[i]*3.5);else gc.lineTo(i*10,27-points[i]*3.5);}gc.stroke();
-        var gap=new Region();HBox.setHgrow(gap,Priority.ALWAYS);var bottom=new HBox(5,trend,gap,graph);bottom.setAlignment(Pos.CENTER_LEFT);
-        var card=new VBox(16,top,bottom);card.getStyleClass().add("summary-card");card.setMinWidth(0);card.setMaxWidth(Double.MAX_VALUE);HBox.setHgrow(card,Priority.ALWAYS);return card;
+        var card=new VBox(16,top,trend);card.getStyleClass().add("summary-card");card.setMinWidth(0);card.setMaxWidth(Double.MAX_VALUE);HBox.setHgrow(card,Priority.ALWAYS);return card;
     }
     private void showPage(){
         int start=Math.min(pageIndex*pageSize.getValue(),filtered.size()),end=Math.min(start+pageSize.getValue(),filtered.size());
@@ -140,6 +126,22 @@ final class DashboardView extends VBox {
     }
     private void setPage(int page){pageIndex=Math.max(0,Math.min(page,pageCount-1));showPage();}
     void verifyInteractions(){
+        if(!table.getItems().isEmpty()) throw new AssertionError("Dashboard: debe iniciar vacío");
+        try {
+            for(int i=0;i<8;i++) {
+                var date=today.minusDays(i<2?0:i==7?8:1);
+                var state=i<2?"Confirmado":"Registrado";
+                section.rows().add(FXCollections.observableArrayList(
+                    "0001","Alumno de prueba","Movimiento de prueba","—",state,date.toString()));
+            }
+            refresh();
+            verifyFilters();
+        } finally {
+            section.rows().clear();
+            refresh();
+        }
+    }
+    private void verifyFilters(){
         if(table.getItems().size()!=5)throw new AssertionError("Dashboard: tamaño inicial de página");
         setPage(1);if(table.getItems().size()!=2)throw new AssertionError("Dashboard: segunda página");
         search("__sin_resultados__");if(!table.getItems().isEmpty())throw new AssertionError("Dashboard: búsqueda");
