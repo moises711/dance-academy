@@ -71,13 +71,17 @@ public final class BackendIntegration {
         }
 
         var matriculas = new MatriculaService(sesion);
+        var operacion = new OperacionService(sesion);
         LocalDate dia = LocalDate.of(2026, 1, 1);
         long plan = matriculas.crearPlan("Sesiones", 30, 1, 12000);
-        long matricula = matriculas.matricular(alumno, plan, dia, null);
+        long instructor = operacion.crearInstructor("Luis", null, 2000);
+        long horario = operacion.crearHorario(instructor, "Baile", 1, LocalTime.of(10, 0), LocalTime.of(11, 0), 20);
+        long matricula = matriculas.matricular(alumno, plan, dia, null, horario);
         matriculas.congelar(matricula, dia, "Viaje");
         matriculas.reactivar(matricula, dia.plusDays(1));
         var hora = LocalTime.of(10, 0);
         long asistencia = matriculas.registrarIngreso(matricula, codigo, null, dia.plusDays(1), hora);
+        comprobar(new MatriculaService(sesion).matriculasSinClase().isEmpty());
         comprobar(asistencia == matriculas.registrarIngreso(matricula, codigo, null, dia.plusDays(1), hora));
         try {
             matriculas.registrarIngreso(matricula, codigo, null, dia.plusDays(1), hora.plusHours(1));
@@ -111,11 +115,9 @@ public final class BackendIntegration {
         }
         finanzas.emitirComprobante(pago, "Ana", null);
         finanzas.devolver(caja, pago);
-        var operacion = new OperacionService(sesion);
         var balance = operacion.consultar(OperacionService.Reporte.CAJAS).getFirst();
         comprobar(((Number) balance.get("efectivo_esperado_centimos")).longValue() == 1000);
         operacion.registrarPeso(alumno, dia, 62.5);
-        long instructor = operacion.crearInstructor("Luis", null, 2000);
         operacion.crearHorario(instructor, "Baile", 1, hora, hora.plusHours(1), 20);
         operacion.registrarAsistenciaInstructor(instructor, dia, hora, hora.plusHours(1));
         long remuneracion = operacion.crearRemuneracion(instructor, dia, dia.plusDays(5), 2000);

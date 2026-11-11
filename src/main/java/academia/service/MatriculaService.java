@@ -27,11 +27,12 @@ public final class MatriculaService {
         });
     }
 
-    public long matricular(long alumno, long plan, LocalDate inicio, Long renovacion) throws SQLException {
+    public long matricular(long alumno, long plan, LocalDate inicio, Long renovacion, long horario)
+            throws SQLException {
         return Sql.write(sesion, AccesoService.Rol.OPERADOR, "matricula.matricular", c -> Sql.id(c, """
-                INSERT INTO matriculas(alumno_id,plan_id,fecha_inicio,fecha_vencimiento,
+                INSERT INTO matriculas(alumno_id,plan_id,horario_id,fecha_inicio,fecha_vencimiento,
                                        precio_centimos,sesiones_contratadas,renovacion_de)
-                SELECT a.estudiante_id,p.id,?,date(?, '+' || (p.duracion_dias-1) || ' days'),
+                SELECT a.estudiante_id,p.id,?, ?, date(?, '+' || (p.duracion_dias-1) || ' days'),
                        p.precio_centimos,p.sesiones,?
                 FROM alumnos a JOIN planes p ON p.id=?
                 WHERE a.estudiante_id=? AND a.estado='activo' AND p.activo=1
@@ -40,8 +41,21 @@ public final class MatriculaService {
                       AND m.estado IN ('activa','vencida') AND m.fecha_vencimiento < ?
                   ))
                 RETURNING id
-                """, inicio.toString(), inicio.toString(), renovacion, plan, alumno,
-                renovacion, renovacion, inicio.toString()));
+                """, horario, inicio.toString(), inicio.toString(), renovacion, plan, alumno,
+                renovacion, renovacion, renovacion));
+    }
+
+    public java.util.List<java.util.Map<String, Object>> matriculasSinClase() throws SQLException {
+        return Sql.read(sesion, AccesoService.Rol.ADMIN, """
+                SELECT m.id, e.nombre, e.email, a.codigo, p.nombre AS plan_nombre, h.id AS horario_id
+                FROM matriculas m
+                JOIN alumnos a ON a.estudiante_id=m.alumno_id
+                JOIN estudiantes e ON e.id=a.estudiante_id
+                JOIN planes p ON p.id=m.plan_id
+                LEFT JOIN horarios h ON h.id=m.horario_id
+                WHERE m.estado='activa' AND (m.horario_id IS NULL OR h.activo=0)
+                ORDER BY e.nombre LIMIT 200
+                """);
     }
 
     public void congelar(long matricula, LocalDate desde, String motivo) throws SQLException {

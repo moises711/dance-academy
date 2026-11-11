@@ -13,7 +13,7 @@ import java.sql.Statement;
 
 public final class Database {
     public static final Path FILE = Path.of("data", "academia.db").toAbsolutePath().normalize();
-    private static final int VERSION = 4;
+    private static final int VERSION = 5;
 
     private Database() {
     }
@@ -87,8 +87,11 @@ public final class Database {
                     runScript(statement, "backfill-alumnos.sql", ";");
                     runScript(statement, "migration-v3.sql", "(?m)^-- siguiente sentencia$");
                 }
-                if (version < VERSION) {
+                if (version < 4) {
                     runScript(statement, "migration-v4.sql", ";");
+                }
+                if (version < VERSION) {
+                    runScript(statement, "migration-v5.sql", ";");
                     statement.execute("PRAGMA user_version = " + VERSION);
                 }
                 try (var result = statement.executeQuery("PRAGMA foreign_key_check")) {
